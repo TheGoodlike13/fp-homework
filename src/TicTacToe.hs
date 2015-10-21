@@ -21,16 +21,57 @@ instance Show MoveHistory where
 
 instance Show Board where
     show (Board board) = showBoard board
-    show (Board []) = "\n+-----+"
-    show (Board (row : others)) = "\n+-----+\n" ++ show row ++ show (Board others)
 
 showBoard :: [[Maybe Token]] -> String
 showBoard [] = "\n+-----+"
-showBoard (row : others) = "\n+-----+\n" ++ rowString ++ showBoard others
-    where
-        rowString = case row of
-            [] -> "|"
-            (Nothing : others) ->
+showBoard (row : others) = "\n+-----+\n" ++ showRow row ++ showBoard others
+
+showRow :: [Maybe Token] -> String
+showRow [] = "|"
+showRow (Nothing : others) = "| " ++ showRow others
+showRow ((Just token) : others) = "|" ++ show token ++ showRow others
+
+instance Json Token where
+    toJson token = JsonString (show token)
+    fromJson (JsonString v)
+        | v == "x" || v == "X" = Just Cross
+        | v == "o" || v == "O" || v == "0" = Just Circle
+    fromJson _ = Nothing
+
+instance Json Move where
+    toJson (Move (x, y, token)) = JsonObject [jsonX, jsonY, jsonV]
+        where
+            jsonX = JsonPair ("x", JsonInt x)
+            jsonY = JsonPair ("y", JsonInt y)
+            jsonV = JsonPair ("v", toJson token)
+    fromJson (JsonObject [JsonPair ("x", JsonInt x), JsonPair ("y", JsonInt y), JsonPair ("v", v)])
+        = fmap (\t -> Move (x, y, t)) (fromJson v)
+    fromJson _ = Nothing
+
+instance Json MoveHistory where
+    toJson (MoveHistory moves) = JsonObject [JsonPair (show i, toJson jsonMove) | jsonMove <- moves, i <- [0..length moves]]
+    fromJson (JsonObject moves) = accumulateJson moves []
+
+accumulateJson :: [JsonPair] -> [Move] -> Maybe MoveHistory
+accumulateJson [] mem = Just (MoveHistory (reverse mem))
+accumulateJson (JsonPair (_, jsonMove) : others) mem = fromJson jsonMove >>= (\move -> accumulateJson others (move : mem))
+
+emptyBoard :: Board
+emptyBoard = Board (replicate 3 (replicate 3 Nothing))
+
+defaultFirstMove :: Move
+defaultFirstMove = Move (1, 1, Cross)
+
+getNextPlayer :: Board -> Token
+getNextPlayer (Board board)
+    | (nothingCount board) `mod` 2 == 1 = Cross
+    | otherwise = Circle
+
+
+
+
+
+
 
 
 
