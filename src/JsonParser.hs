@@ -7,9 +7,10 @@ import Text.Read
 
 class Json a where
     toJson :: a -> JsonValue
+    fromJson :: JsonValue -> Maybe a
+
     encodeJson :: a -> String
     encodeJson jsonObject = show (toJson jsonObject)
-    fromJson :: JsonValue -> Maybe a
     parseJson :: String -> Maybe a
     parseJson jsonString = parse jsonString >>= fromJson
 
