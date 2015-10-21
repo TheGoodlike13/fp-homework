@@ -148,7 +148,7 @@ parseNextNumberWithResult "" "" _ = Nothing
 parseNextNumberWithResult "" mem converter = result
     where
         memStr = reverse mem
-        value = converter memStr >>= reduceInteger
+        value = fmap reduceInteger (converter memStr)
         result = fmap (\m -> (m, "")) value
 parseNextNumberWithResult (char : rest) mem converter
     | isDigit char || char == '-' || char == '+' = parseNextNumberWithResult rest (char : mem) converter
@@ -156,17 +156,17 @@ parseNextNumberWithResult (char : rest) mem converter
     | otherwise = result
     where
         memStr = reverse mem
-        value = converter memStr >>= reduceInteger
+        value = fmap reduceInteger (converter memStr)
         result = fmap (\m -> (m, (char : rest))) value
 
-reduceInteger :: JsonValue -> Maybe JsonValue
+reduceInteger :: JsonValue -> JsonValue
 reduceInteger (JsonInteger int)
-    | int <= maxValue && int >= minValue = Just (JsonInt convertedValue)
+    | int <= maxValue && int >= minValue = JsonInt convertedValue
     where
         minValue = toInteger (minBound :: Int)
         maxValue = toInteger (maxBound :: Int)
         convertedValue = fromInteger int :: Int
-reduceInteger anyOther = Just anyOther
+reduceInteger anyOther = anyOther
 
 parseValueInPair :: String -> String -> Maybe (JsonPair, String)
 parseValueInPair "" _ = Nothing
