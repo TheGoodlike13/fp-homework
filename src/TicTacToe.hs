@@ -134,16 +134,13 @@ isWinner :: Token -> Board -> Bool
 isWinner token board = checkRows token board || checkColumns token board || checkDiagonals token board
 
 checkRows :: Token -> Board -> Bool
-checkRows token board = foldl (&&) True [checkArray token row | row <- board]
+checkRows token board = foldl (||) False [checkArray token row | row <- board]
 
 checkColumns :: Token -> Board -> Bool
-checkColumns token board = foldl (&&) True [checkColumn i token board | i <- indexes]
-
-checkColumn :: Int -> Token -> Board -> Bool
-checkColumn i token board = checkArray token (getCollumn i board)
+checkColumns token board = foldl (||) False [checkArray token (getCollumn i board) | i <- indexes]
 
 checkDiagonals :: Token -> Board -> Bool
-checkDiagonals token board = checkArray token (getLeftDiagonal board) && checkArray token (getRightDiagonal board)
+checkDiagonals token board = checkArray token (getLeftDiagonal board) || checkArray token (getRightDiagonal board)
 
 checkArray :: Token -> [Maybe Token] -> Bool
 checkArray _ [] = True
@@ -163,7 +160,7 @@ getRow i board = board !! i
 
 getCollumn :: Int -> Board -> [Maybe Token]
 getCollumn i board = getArray coords board
-    where coords = zip (replicate 3 i) indexes
+    where coords = zip indexes (replicate 3 i)
 
 getLeftDiagonal :: Board -> [Maybe Token]
 getLeftDiagonal board = getArray coords board
