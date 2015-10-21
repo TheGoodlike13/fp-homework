@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module JsonParser where
 
 import Data.Char
@@ -14,7 +16,7 @@ class Json a where
     parseJson :: String -> Maybe a
     parseJson jsonString = parse jsonString >>= fromJson
 
-data JsonPair = JsonPair (String, JsonValue) deriving (Eq)
+type JsonPair = (String, JsonValue)
 data JsonValue = JsonArray [JsonValue]
                     | JsonObject [JsonPair]
                     | JsonString String
@@ -23,8 +25,8 @@ data JsonValue = JsonArray [JsonValue]
                     | JsonDouble Double
                     deriving (Eq)
 
-instance Show JsonPair where
-    show (JsonPair (string, jsonValue)) = "\"" ++ string ++ "\": " ++ show jsonValue
+instance {-# OVERLAPPING #-} Show JsonPair where
+    show (string, jsonValue) = "\"" ++ string ++ "\": " ++ show jsonValue
 
 instance Show JsonValue where
     show (JsonString str) = "\"" ++ str ++ "\""
@@ -91,7 +93,7 @@ parseNextPair (char : rest)
 
 parseValueInPair :: String -> String -> Maybe (JsonPair, String)
 parseValueInPair "" _ = Nothing
-parseValueInPair (':' : rest) key = parseNextValue rest >>= (\value -> Just (JsonPair (key, (fst value)), (snd value)))
+parseValueInPair (':' : rest) key = parseNextValue rest >>= (\value -> Just ((key, (fst value)), (snd value)))
 
 parseNextString :: String -> Maybe (JsonValue, String)
 parseNextString any = parseNextStringWithResult any []
