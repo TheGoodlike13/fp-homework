@@ -61,6 +61,27 @@ parseNextObject any = parseNextObjectWithResults any Nothing []
 parseNextString :: String -> Maybe (JsonValue, String)
 parseNextString any = parseNextStringWithResult any []
 
+parseNextStringWithResult :: String -> String -> Maybe (JsonValue, String)
+parseNextStringWithResult "" _ = Nothing
+parseNextStringWithResult ('"' : rest) mem = Just (JsonString (reverse mem), rest)
+parseNextStringWithResult [char] _ = Nothing
+parseNextStringWithResult ('\\' : escaped : rest) mem
+    | escaped == '"' = parseNextStringWithResult rest ('"' : mem)
+    | escaped == '\\' = parseNextStringWithResult rest ('\\' : mem)
+    | escaped == '/' = parseNextStringWithResult rest ('/' : mem)
+    | escaped == 'b' = parseNextStringWithResult rest ('\b' : mem)
+    | escaped == 'f' = parseNextStringWithResult rest ('\f' : mem)
+    | escaped == 'n' = parseNextStringWithResult rest ('\n' : mem)
+    | escaped == 'r' = parseNextStringWithResult rest ('\r' : mem)
+    | escaped == 't' = parseNextStringWithResult rest ('\t' : mem)
+parseNextStringWithResult ('\\' : 'u' : hex1 : hex2 : hex3 : hex4 : rest) mem
+    | all isHexDigit hexStr = parseNextStringWithResult rest ((charFromUnicode hexStr) : mem)
+    where hexStr = [hex1, hex2, hex3, hex4]
+parseNextStringWithResult ('\\' : rest) _ = Nothing
+parseNextStringWithResult (char : rest) mem
+    | isControl char = Nothing
+    | otherwise = parseNextStringWithResult rest (char : mem)
+
 parseNextNumber :: String -> Maybe (JsonValue, String)
 parseNextNumber any = parseNextNumberWithResult any [] toInt
 
@@ -123,26 +144,6 @@ parseNextObjectWithResults (char : rest) lastMem fullMem
         justPair = fromJust nextPair
         pair = fst justPair
         remains = snd justPair
-
-parseNextStringWithResult :: String -> String -> Maybe (JsonValue, String)
-parseNextStringWithResult "" _ = Nothing
-parseNextStringWithResult ['\"'] mem = Just (JsonString (reverse mem), "")
-parseNextStringWithResult [char] _ = Nothing
-parseNextStringWithResult (char : rest) _ | isControl char = Nothing
-parseNextStringWithResult ('\\' : '"' : rest) mem = parseNextStringWithResult rest ('"' : mem)
-parseNextStringWithResult ('\\' : '\\' : rest) mem = parseNextStringWithResult rest ('\\' : mem)
-parseNextStringWithResult ('\\' : '/' : rest) mem = parseNextStringWithResult rest ('/' : mem)
-parseNextStringWithResult ('\\' : 'b' : rest) mem = parseNextStringWithResult rest ('\b' : mem)
-parseNextStringWithResult ('\\' : 'f' : rest) mem = parseNextStringWithResult rest ('\f' : mem)
-parseNextStringWithResult ('\\' : 'n' : rest) mem = parseNextStringWithResult rest ('\n' : mem)
-parseNextStringWithResult ('\\' : 'r' : rest) mem = parseNextStringWithResult rest ('\r' : mem)
-parseNextStringWithResult ('\\' : 't' : rest) mem = parseNextStringWithResult rest ('\t' : mem)
-parseNextStringWithResult ('\\' : 'u' : hex1 : hex2 : hex3 : hex4 : rest) mem
-    | all isHexDigit hexStr = parseNextStringWithResult rest ((charFromUnicode hexStr) : mem)
-    where hexStr = [hex1, hex2, hex3, hex4]
-parseNextStringWithResult ('\\' : rest) _ = Nothing
-parseNextStringWithResult (char : '"' : rest) mem = Just (JsonString (reverse (char : mem)), rest)
-parseNextStringWithResult (char : rest) mem = parseNextStringWithResult rest (char : mem)
 
 parseNextNumberWithResult :: String -> String -> (String -> Maybe JsonValue) -> Maybe (JsonValue, String)
 parseNextNumberWithResult "" "" _ = Nothing
