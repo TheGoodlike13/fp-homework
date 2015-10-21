@@ -1,78 +1,131 @@
 module TicTacToe where
 
+import Data.List
 import Data.Maybe
+import JsonParser
 
-data Token = Cross | Circle
-type Move = (Int, Int, Token)
-type MoveHistory = [Move]
-type Row = [Maybe Token]
-type Board = [Row]
-type GameState = (Board, Token)
+data Token = Cross | Circle deriving (Eq)
+data Move = Move (Int, Int, Token) deriving (Eq)
+data MoveHistory = MoveHistory [Move] deriving (Eq)
+data Row = Row [Maybe Token] deriving (Eq)
+data Board = Board [Row] deriving (Eq)
+data GameState = GameState (Board, Token) deriving (Eq)
+
+instance Show Token where
+    show Cross = "X"
+    show Circle = "O"
+
+instance Show Move where
+    show (Move (x, y, token)) = "(" ++ show x ++ ", " ++ show y ++ ", " ++ show token ++ ")"
+
+instance Show MoveHistory where
+    show (MoveHistory moves) = "[" ++ intercalate ", " [show move | move <- moves] ++ "]"
+
+instance Show Row where
+    show (Row []) = "|"
+    show (Row (Nothing : others)) = "| " ++ show (Row others)
+    show (Row ((Just token) : others)) = "|" ++ show token ++ show (Row others)
+
+instance Show Board where
+    show (Board []) = "\n+-----+"
+    show (Board (row : others)) = "\n+-----+\n" ++ show row ++ show (Board others)
+
+instance Show GameState where
+    show (GameState (board, nextPlayer)) = show board ++ "\nNext player: " ++ show nextPlayer
+
+instance Json Token where
+    toJson token = JsonString (show token)
+    fromJson (JsonString v)
+        | v == "x" || v == "X" = Just Cross
+        | v == "o" || v == "O" || v == "0" = Just Circle
+    fromJson _ = Nothing
+
+instance Json Move where
+    toJson (Move (x, y, token)) = JsonObject [jsonX, jsonY, jsonV]
+        where
+            jsonX = JsonPair ("x", JsonInt x)
+            jsonY = JsonPair ("y", JsonInt y)
+            jsonV = JsonPair ("v", toJson token)
+    fromJson (JsonObject [JsonPair ("x", JsonInt x), JsonPair ("y", JsonInt y), JsonPair ("v", v)])
+        = fmap (\t -> Move (x, y, t)) (fromJson v)
+    fromJson _ = Nothing
+
+instance Json MoveHistory where
+    toJson (MoveHistory moves) = JsonObject [JsonPair (show i, toJson jsonMove) | jsonMove <- moves, i <- [0..length moves]]
+    fromJson (JsonObject moves) = accumulateJson moves []
+
+accumulateJson :: [JsonPair] -> [Move] -> Maybe MoveHistory
+accumulateJson [] mem = Just (MoveHistory (reverse mem))
+accumulateJson (JsonPair (_, jsonMove) : others) mem = fromJson jsonMove >>= (\move -> accumulateJson others (move : mem))
 
 isValid :: MoveHistory -> Bool
 isValid moves = isJust (replay moves)
 
 nextMove :: MoveHistory -> Maybe Move
 nextMove moves
-    | length moves == 9 = Nothing
-    | length moves == 0 = Just defaultFirstMove
+    | amountOf moves == 9 = Nothing
+    | amountOf moves == 0 = Just defaultFirstMove
     | otherwise = (replay moves) >>= findNextMove
 
-victorious :: MoveHistory -> Maybe Token
-victorious moves = board >>= weHaveAWinner
-    where
-        board = fmap justBoard (replay moves)
+gameWinner :: Board -> Maybe Token
+gameWinner board
+    | isWinner Cross board = Just Cross
+    | isWinner Circle board = Just Circle
+    | otherwise = Nothing
 
--- toStr
+emptyBoard :: Board
+emptyBoard = Board (replicate 3 (Row (replicate 3 Nothing)))
 
-toStr :: Board -> String
-toStr [] = "+-----+\n"
-toStr (row : others) =  "+-----+\n" ++ toStr2 row ++ toStr others
-
-toStr2 :: Row -> String
-toStr2 [] = "|\n"
-toStr2 (token : others) = "|" ++ toStr3 token ++ toStr2 others
-
-toStr3 :: Maybe Token -> String
-toStr3 Nothing = " "
-toStr3 (Just Cross) = "X"
-toStr3 (Just Circle) = "O"
-
-toStr4 :: GameState -> String
-toStr4 (board, nextPlayer) = toStr board
-
--- helpers
-
-freshBoard :: Board
-freshBoard = replicate 3 (replicate 3 Nothing)
-
-initialGameState :: GameState
-initialGameState = (freshBoard, Cross)
+getState :: Board -> GameState
+getState board
+    | (nothingCount board) `mod` 2 == 1 = GameState (board, Cross)
+    | otherwise = GameState (board, Circle)
 
 justBoard :: GameState -> Board
-justBoard (board, nextPlayer) = board
+justBoard (GameState (board, _)) = board
 
 defaultFirstMove :: Move
-defaultFirstMove = (1, 1, Cross)
+defaultFirstMove = Move (1, 1, Cross)
 
 play :: Move -> GameState -> Maybe GameState
-play (x, y, token) (board, nextPlayer)
+play (Move (x, y, token)) (GameState (board, nextPlayer))
     | x < 0 || x > 2 || y < 0 || y > 2 = Nothing
-    | isJust (weHaveAWinner board) = Nothing
-    | same token nextPlayer = newState
-    | otherwise = Nothing
+    | winnerExists board = Nothing
+    | token /= nextPlayer = Nothing
+    | otherwise = newState
     where
-        oldRow = board !! x
-        newRow = replaceToken y token oldRow
-        newBoard = fmap (\row -> replace x row board) newRow
-        newState = makeState newBoard nextPlayer
+        newBoard = applyMove x y token board
+        newState = fmap getState newBoard
+
+applyMove :: Int -> Int -> Token -> Board -> Maybe Board
+applyMove x y token board = newBoard
+    where
+        newRow = replaceToken y token (getRow x board)
+        newBoard = newRow >>= (\row -> replaceRow x row board)
+
+replaceRow :: Int -> Row -> Board -> Maybe Board
+replaceRow x row (Board board)
+    | x < 0 || x >= length board = Nothing
+    | otherwise = Just (Board (replace x row board))
+
+replaceToken :: Int -> Token -> Row -> Maybe Row
+replaceToken y token (Row row)
+    | y < 0 || y >= length row = Nothing
+    | isJust currentItem = Nothing
+    | otherwise = Just (Row (replace y (Just token) row))
+    where
+        currentItem = row !! y
 
 replay :: MoveHistory -> Maybe GameState
-replay moves = replayAccumulate moves (Just initialGameState)
+replay (MoveHistory moves) = replayAccumulate moves (Just (getState emptyBoard))
+
+replayAccumulate :: [Move] -> Maybe GameState -> Maybe GameState
+replayAccumulate [] state = state
+replayAccumulate (move : others) state = replayAccumulate others (state >>= play move)
 
 findNextMove :: GameState -> Maybe Move
-findNextMove (board, nextPlayer)
-    | checkWin (other nextPlayer) board = Nothing
+findNextMove (GameState (board, nextPlayer))
+    | isWinner (other nextPlayer) board = Nothing
     | haveAnyWinningMoves = Just (head winningMoves)
     | nextPlayerHasMoreThanOneWinningMove = Nothing
     | nextPlayerHasOneWinningMove = Just (overtake (head nextPlayerWinningMoves))
@@ -87,111 +140,88 @@ findNextMove (board, nextPlayer)
         nextPlayerHasMoreThanOneWinningMove = length nextPlayerWinningMoves > 1
 
 overtake :: Move -> Move
-overtake (x, y, token) = (x, y, other token)
+overtake (Move (x, y, token)) = Move (x, y, other token)
 
 findWinningMoves :: [Move] -> Board -> [Move]
 findWinningMoves [] _ = []
 findWinningMoves (move : others) board
-    | isJust winner = move : findWinningMoves others board
+    | winnerExists afterMove = move : findWinningMoves others board
     | otherwise = findWinningMoves others board
     where
         afterMove = forceMove move board
-        winner = weHaveAWinner afterMove
 
 findAllPossibleMoves :: Board -> Token -> [Move]
-findAllPossibleMoves board token = accumulatePossibleMoves board token 0 []
+findAllPossibleMoves (Board board) token = accumulatePossibleMoves board token 0 []
 
-accumulatePossibleMoves :: Board -> Token -> Int -> [Move] -> [Move]
+accumulatePossibleMoves :: [Row] -> Token -> Int -> [Move] -> [Move]
 accumulatePossibleMoves [] _ _ moves = moves
-accumulatePossibleMoves (row : rest) token x moves = accumulatePossibleMoves rest token (x + 1) (movesInRow ++ moves)
+accumulatePossibleMoves (Row row : rest) token x moves = accumulatePossibleMoves rest token (x + 1) (movesInRow ++ moves)
     where
         movesInRow = accumulatePossibleMovesInRow row token x 0 []
 
-accumulatePossibleMovesInRow :: Row -> Token -> Int -> Int -> [Move] -> [Move]
+accumulatePossibleMovesInRow :: [Maybe Token] -> Token -> Int -> Int -> [Move] -> [Move]
 accumulatePossibleMovesInRow [] _ _ _ moves = moves
 accumulatePossibleMovesInRow (first : rest) token x y moves
     | isJust first = accumulatePossibleMovesInRow rest token x (y + 1) moves
     | otherwise = accumulatePossibleMovesInRow rest token x (y + 1) (move : moves)
     where
-        move = (x, y, token)
+        move = Move (x, y, token)
 
-weHaveAWinner :: Board -> Maybe Token
-weHaveAWinner board
-    | checkWin Cross board = Just Cross
-    | checkWin Circle board = Just Circle
-    | otherwise = Nothing
+winnerExists :: Board -> Bool
+winnerExists board = isJust (gameWinner board)
 
 other :: Token -> Token
 other Cross = Circle
 other Circle = Cross
 
-same :: Token -> Token -> Bool
-same Cross Cross = True
-same Circle Circle = True
-same _ _ = False
+isWinner :: Token -> Board -> Bool
+isWinner token (Board board) = checkRows token board || checkColumns token board || checkDiagonals token board
 
-replayAccumulate :: MoveHistory -> Maybe GameState -> Maybe GameState
-replayAccumulate [] state = state
-replayAccumulate (move : others) state = replayAccumulate others (state >>= play move)
-
-replaceToken :: Int -> Token -> Row -> Maybe Row
-replaceToken i token row
-    | i < 0 || i >= length row = Nothing
-    | isJust currentItem = Nothing
-    | otherwise = Just (replace i (Just token) row)
-    where
-        currentItem = row !! i
-
-makeState :: Maybe Board -> Token -> Maybe GameState
-makeState Nothing _ = Nothing
-makeState board token = Just (fromJust board, other token)
-
-checkWin :: Token -> Board -> Bool
-checkWin token board = checkRows token board || checkColumns token board || checkDiagonals token board
-
-checkRows :: Token -> Board -> Bool
+checkRows :: Token -> [Row] -> Bool
 checkRows _ [] = False
-checkRows token (first : others)
-    | checkArray token first = True
+checkRows token ((Row row) : others)
+    | checkArray token row = True
     | otherwise = checkRows token others
 
-checkColumns :: Token -> Board -> Bool
+checkColumns :: Token -> [Row] -> Bool
 checkColumns token board = checkColumnsStartingWith 0 token board
 
-checkColumnsStartingWith :: Int -> Token -> Board -> Bool
+checkColumnsStartingWith :: Int -> Token -> [Row] -> Bool
 checkColumnsStartingWith i token board
     | i >= length board = False
-    | checkArray token (map (\row -> row !! i) board) = True
+    | checkArray token (map (\row -> getToken i row) board) = True
     | otherwise = checkColumnsStartingWith (i + 1) token board
 
-checkDiagonals :: Token -> Board -> Bool
+checkDiagonals :: Token -> [Row] -> Bool
 checkDiagonals token board = checkArray token (leftDiagonal board) || checkArray token (rightDiagonal board)
 
-leftDiagonal :: Board -> [Maybe Token]
+leftDiagonal :: [Row] -> [Maybe Token]
 leftDiagonal board = diagonalAccumulate board [] 0 (\i -> i + 1)
 
-rightDiagonal :: Board -> [Maybe Token]
+rightDiagonal :: [Row] -> [Maybe Token]
 rightDiagonal board = diagonalAccumulate board [] (length board - 1) (\i -> i - 1)
 
-diagonalAccumulate :: Board -> [Maybe Token] -> Int -> (Int -> Int) -> [Maybe Token]
+diagonalAccumulate :: [Row] -> [Maybe Token] -> Int -> (Int -> Int) -> [Maybe Token]
 diagonalAccumulate [] diagonal _ _ = diagonal
-diagonalAccumulate (row : others) diagonal i f_i = diagonalAccumulate others ((row !! i) : diagonal) (f_i i) f_i
+diagonalAccumulate (row : others) diagonal i f_i = diagonalAccumulate others ((getToken i row) : diagonal) (f_i i) f_i
 
 checkArray :: Token -> [Maybe Token] -> Bool
 checkArray _ [] = True
 checkArray token (first : others)
     | isNothing first = False
-    | same token (fromJust first) = checkArray token others
+    | token == (fromJust first) = checkArray token others
     | otherwise = False
 
 forceMove :: Move -> Board -> Board
-forceMove (x, y, token) board = newBoard
+forceMove (Move (x, y, token)) board = fromJust newBoard
     where
-        oldRow = board !! x
-        newRow = replace y (Just token) oldRow
-        newBoard = replace x newRow board
+        newBoard = applyMove x y token board
 
--- utils
+nothingCount :: Board -> Int
+nothingCount (Board board) = sum [nothingCountInRow row | row <- board]
+
+nothingCountInRow :: Row -> Int
+nothingCountInRow (Row row) = length [token | token <- row, isNothing token]
 
 replace :: Int -> a -> [a] -> [a]
 replace i element (first : others)
@@ -199,44 +229,11 @@ replace i element (first : others)
     | i == 0 = element : others
     | otherwise = first : replace (i - 1) element others
 
--- test
+getRow :: Int -> Board -> Row
+getRow i (Board board) = board !! i
 
-testBoard :: Board
-testBoard = forceMove (1, 1, Cross) freshBoard
+getToken :: Int -> Row -> Maybe Token
+getToken i (Row row) = row !! i
 
-testState :: GameState
-testState = (testBoard, Circle)
-
-pb :: Board -> IO()
-pb board = pmb (Just board)
-
-ps :: GameState -> IO()
-ps state = pms (Just state)
-
-pr :: Row -> IO()
-pr row = pmr (Just row)
-
-pt :: Token -> IO()
-pt token = pmt (Just token)
-
-pm :: Move -> IO()
-pm move = pmm (Just move)
-
-pmb :: Maybe Board -> IO()
-pmb Nothing = putStr "Nothing\n"
-pmb (Just board) = putStr (toStr board)
-
-pms :: Maybe GameState -> IO()
-pms Nothing = putStr "Nothing\n"
-pms (Just (board, nextPlayer)) = putStr (toStr board)
-
-pmr :: Maybe Row -> IO()
-pmr Nothing = putStr "Nothing\n"
-pmr (Just row) = putStr (toStr2 row)
-
-pmt :: Maybe Token -> IO()
-pmt token = putStr ((toStr3 token) ++ "\n")
-
-pmm :: Maybe Move -> IO()
-pmm Nothing = putStr "Nothing\n"
-pmm (Just (x, y, token)) = putStr ("(" ++ (show x) ++ ", " ++ (show y) ++ ", " ++ (toStr3 (Just token)) ++ ")\n")
+amountOf :: MoveHistory -> Int
+amountOf (MoveHistory moves) = length moves
