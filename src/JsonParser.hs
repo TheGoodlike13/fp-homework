@@ -55,6 +55,19 @@ parseNextValue (char : rest)
 parseNextArray :: String -> Maybe (JsonValue, String)
 parseNextArray any = parseNextArrayWithResults any Nothing []
 
+parseNextArrayWithResults :: String -> Maybe JsonValue -> [JsonValue] -> Maybe (JsonValue, String)
+parseNextArrayWithResults "" _ _ = Nothing
+parseNextArrayWithResults (',' : rest) lastMem fullMem
+    = lastMem >>= (\mem -> parseNextArrayWithResults rest Nothing (mem : fullMem))
+parseNextArrayWithResults (']' : rest) Nothing [] = Just (JsonArray [], rest)
+parseNextArrayWithResults (']' : rest) lastMem fullMem
+    = lastMem >>= (\lastValue -> Just (JsonArray (reverse (lastValue : fullMem)), rest))
+parseNextArrayWithResults (char : rest) lastMem fullMem
+    | isSpace char = parseNextArrayWithResults rest lastMem fullMem
+parseNextArrayWithResults json (Just _) _ = Nothing
+parseNextArrayWithResults json _ fullMem
+    = parseNextValue json >>= (\value -> parseNextArrayWithResults (snd value) (Just (fst value)) fullMem)
+
 parseNextObject :: String -> Maybe (JsonValue, String)
 parseNextObject any = parseNextObjectWithResults any Nothing []
 
@@ -96,30 +109,6 @@ parseNextPair (char : rest)
         justKey = fromJust parsedKey
         key = fst justKey
         keyRemains = snd justKey
-
-parseNextArrayWithResults :: String -> Maybe JsonValue -> [JsonValue] -> Maybe (JsonValue, String)
-parseNextArrayWithResults "" _ _ = Nothing
-parseNextArrayWithResults (',' : rest) lastMem fullMem
-    | isNothing lastMem = Nothing
-    | otherwise = parseNextArrayWithResults rest Nothing (value : fullMem)
-    where value = fromJust lastMem
-parseNextArrayWithResults (']' : rest) lastMem fullMem
-    | isNothing lastMem && null fullMem = Just (JsonArray [], rest)
-    | isNothing lastMem = Nothing
-    | otherwise = Just (JsonArray (reverse mem), rest)
-    where
-        value = fromJust lastMem
-        mem = value : fullMem
-parseNextArrayWithResults (char : rest) lastMem fullMem
-    | isSpace char = parseNextArrayWithResults rest lastMem fullMem
-    | isJust lastMem = Nothing
-    | isNothing nextValue = Nothing
-    | otherwise = parseNextArrayWithResults remains (Just value) fullMem
-    where
-        nextValue = parseNextValue (char : rest)
-        justValue = fromJust nextValue
-        value = fst justValue
-        remains = snd justValue
 
 parseNextObjectWithResults :: String -> Maybe JsonPair -> [JsonPair] -> Maybe (JsonValue, String)
 parseNextObjectWithResults "" _ _ = Nothing
