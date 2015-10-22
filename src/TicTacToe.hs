@@ -40,13 +40,9 @@ instance Json Token where
     fromJson _ = Nothing
 
 instance Json Move where
-    toJson (x, y, token) = JsonObject [jsonX, jsonY, jsonV]
-        where
-            jsonX = ("x", JsonInt x)
-            jsonY = ("y", JsonInt y)
-            jsonV = ("v", toJson token)
+    toJson (x, y, token) = JsonObject [("x", JsonInt x), ("y", JsonInt y), ("v", toJson token)]
     fromJson (JsonObject [("x", JsonInt x), ("y", JsonInt y), ("v", v)])
-        = fmap (\t -> (x, y, t)) (fromJson v)
+        = fmap (\token -> (x, y, token)) (fromJson v)
     fromJson _ = Nothing
 
 instance Json MoveHistory where
