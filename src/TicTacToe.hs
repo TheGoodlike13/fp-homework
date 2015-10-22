@@ -32,14 +32,14 @@ instance {-# OVERLAPPING #-} Show Row where
     show (Nothing : others) = "| " ++ show others
     show ((Just token) : others) = "|" ++ show token ++ show others
 
-instance {-# OVERLAPPING #-} Json Token where
+instance Json Token where
     toJson token = JsonString (show token)
     fromJson (JsonString v)
         | v == "x" || v == "X" = Just Cross
         | v == "o" || v == "O" || v == "0" = Just Circle
     fromJson _ = Nothing
 
-instance {-# OVERLAPPING #-} Json Move where
+instance Json Move where
     toJson (x, y, token) = JsonObject [jsonX, jsonY, jsonV]
         where
             jsonX = ("x", JsonInt x)
@@ -49,7 +49,7 @@ instance {-# OVERLAPPING #-} Json Move where
         = fmap (\t -> (x, y, t)) (fromJson v)
     fromJson _ = Nothing
 
-instance {-# OVERLAPPING #-} Json MoveHistory where
+instance Json MoveHistory where
     toJson moves = JsonObject [(show i, toJson jsonMove) | jsonMove <- moves, i <- [0..length moves]]
     fromJson (JsonObject moves) = accumulateJson moves []
 
