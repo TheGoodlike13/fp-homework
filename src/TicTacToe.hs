@@ -50,7 +50,7 @@ instance Json Move where
     fromJson _ = Nothing
 
 instance Json MoveHistory where
-    toJson moves = JsonObject [(show i, toJson jsonMove) | jsonMove <- moves, i <- [0..length moves]]
+    toJson moves = JsonObject [(show i, toJson jsonMove) | jsonMove <- moves, i <- [0..length moves - 1]]
     fromJson (JsonObject moves) = accumulateJson moves []
 
 accumulateJson :: [JsonPair] -> [Move] -> Maybe MoveHistory
