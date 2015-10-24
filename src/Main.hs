@@ -23,3 +23,7 @@ convert (x, y, token)
 
 convertToken :: Token -> Char
 convertToken token = head (show token)
+
+main :: IO()
+main = do
+    putStrLn "Nothing!"
