@@ -1,7 +1,10 @@
 module Main where
 
+import Data.List
 import Data.Maybe
 import JsonParser
+import Network.HTTP
+import System.Environment
 import TicTacToe
 
 validate :: String -> Bool
@@ -24,6 +27,35 @@ convert (x, y, token)
 convertToken :: Token -> Char
 convertToken token = head (show token)
 
+gameUrl :: String -> String
+gameUrl gameId = "http://tictactoe.homedir.eu/game/" ++ gameId
+
+contentType :: String
+contentType = "application/json+map"
+
+getGameBody :: String -> IO String
+getGameBody url = do
+    response <- simpleHTTP (getRequest url)
+    getResponseBody response
+
+postGameMove :: String -> Move -> IO String
+postGameMove url move = do
+    response <- simpleHTTP (postRequestWithBody url contentType (encodeJson move))
+    getResponseBody response
+
+playGame :: String -> IO()
+playGame matchUrl = do
+    movesJson <- getGameBody matchUrl
+    let board = parseJson movesJson >>= replay
+    let nextGameMove = board >>= nextMove
+    if (isNothing nextGameMove) then
+        print "Game over!" >> return ()
+    else
+        postGameMove matchUrl (fromJust nextGameMove) >> print (fromJust board) >> playGame matchUrl
+
 main :: IO()
 main = do
-    putStrLn "Nothing!"
+    matchName <- fmap head getArgs
+    let matchUrl = gameUrl matchName
+    playGame matchUrl
+
